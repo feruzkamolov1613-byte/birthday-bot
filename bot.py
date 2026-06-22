@@ -115,8 +115,13 @@ async def daily_check(ctx: ContextTypes.DEFAULT_TYPE):
             await ctx.bot.send_message(
                 chat_id=GROUP_ID,
                 text=(
-                    f"🎂🎉 Bugun *{name}*ning tug'ilgan kuni!\n\n"
-                    f"Hammamiz tabrik qilamiz! 🥳🎁"
+                    f"🎂 *Hurmatli {name}!*\n\n"
+                    f"Safia jamoasi nomidan tug'ilgan kuningiz bilan samimiy tabriklaymiz! 🎉\n"
+                    f"Hayotingizning har bir kuni yangi yutuqlar va quvonchlarga to'la bo'lsin! "
+                    f"Ishingizda va karyerangizda yangi yutuqlar, har bir qadamingizda muvaffaqiyat, "
+                    f"oilangizda doim tinchlik, baxt va sog'lik hukm sursin! "
+                    f"Siz uchun eng yaxshi tilaklar! 🥳\n\n"
+                    f"*Safia jamoasi* 🎂"
                 ),
                 parse_mode="Markdown"
             )
