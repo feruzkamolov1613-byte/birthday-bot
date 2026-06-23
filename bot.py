@@ -1,7 +1,6 @@
 import os
 import json
-import asyncio
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, ContextTypes, JobQueue
@@ -10,6 +9,9 @@ from telegram.ext import (
 TOKEN = os.environ.get("BOT_TOKEN")
 GROUP_ID = int(os.environ.get("GROUP_ID", "0"))
 DATA_FILE = "birthdays.json"
+
+# O'zbekiston vaqti UTC+5
+UZT = timezone(timedelta(hours=5))
 
 
 def load_data():
@@ -24,38 +26,56 @@ def save_data(data):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
-# /add Ism KK.OO  →  masalan: /add Ali 15.07
+def today_uzt():
+    return datetime.now(UZT).strftime("%d.%m")
+
+
+async def send_greetings(bot, today):
+    data = load_data()
+    birthdays_today = [name for name, date in data.items() if date == today]
+    if birthdays_today and GROUP_ID != 0:
+        for name in birthdays_today:
+            await bot.send_message(
+                chat_id=GROUP_ID,
+                text=(
+                    f"🎂 *Hurmatli {name}!*\n\n"
+                    f"Safia jamoasi nomidan tug'ilgan kuningiz bilan samimiy tabriklaymiz! 🎉\n"
+                    f"Hayotingizning har bir kuni yangi yutuqlar va quvonchlarga to'la bo'lsin! "
+                    f"Ishingizda va karyerangizda yangi yutuqlar, har bir qadamingizda muvaffaqiyat, "
+                    f"oilangizda doim tinchlik, baxt va sog'lik hukm sursin! "
+                    f"Siz uchun eng yaxshi tilaklar! 🥳\n\n"
+                    f"*Safia jamoasi* 🎂"
+                ),
+                parse_mode="Markdown"
+            )
+    return birthdays_today
+
+
+# /add Ism KK.OO
 async def add(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     args = ctx.args
     if len(args) < 2:
-        await update.message.reply_text(
-            "❌ Format: /add Ism KK.OO\nMasalan: /add Ali 15.07"
-        )
+        await update.message.reply_text("❌ Format: /add Ism KK.OO\nMasalan: /add Ali 15.07")
         return
-
     name = args[0]
     date_str = args[1]
-
     try:
         datetime.strptime(date_str, "%d.%m")
     except ValueError:
-        await update.message.reply_text("❌ Sana noto'g'ri. Format: KK.OO  (masalan 15.07)")
+        await update.message.reply_text("❌ Sana noto'g'ri. Format: KK.OO (masalan 15.07)")
         return
-
     data = load_data()
     data[name] = date_str
     save_data(data)
     await update.message.reply_text(f"✅ {name} — {date_str} saqlandi!")
 
 
-# /list — barchani ko'rsatish
+# /list
 async def list_bd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     data = load_data()
     if not data:
         await update.message.reply_text("📭 Hozircha hech kim yo'q. /add orqali qo'shing.")
         return
-
-    # Sana bo'yicha saralash
     sorted_items = sorted(data.items(), key=lambda x: (int(x[1].split(".")[1]), int(x[1].split(".")[0])))
     text = "🎂 *Tug'ilgan kunlar ro'yxati:*\n\n"
     for name, date in sorted_items:
@@ -86,45 +106,39 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "/add Ism KK.OO — qo'shish\n"
         "/list — ro'yxat\n"
         "/delete Ism — o'chirish\n"
-        "/check — bugun tug'ilgan kunlarni tekshirish",
+        "/check — bugun tug'ilgan kunlarni tekshirish\n"
+        "/sendnow — hozir gruppaga tabrik yuborish",
         parse_mode="Markdown"
     )
 
 
-# /check — qo'lda tekshirish
+# /check
 async def check(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    today = datetime.now().strftime("%d.%m")
+    today = today_uzt()
     data = load_data()
     birthdays_today = [name for name, date in data.items() if date == today]
-
     if birthdays_today:
         names = ", ".join(birthdays_today)
         await update.message.reply_text(f"🎉 Bugun tug'ilgan kun: {names}")
     else:
-        await update.message.reply_text("😊 Bugun hech kimning tug'ilgan kuni yo'q.")
+        await update.message.reply_text(f"😊 Bugun ({today}) hech kimning tug'ilgan kuni yo'q.")
 
 
-# Har kuni ertalab 9:00 da avtomatik tekshirish
+# /sendnow — hozir gruppaga yuborish (test uchun)
+async def sendnow(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    today = today_uzt()
+    birthdays_today = await send_greetings(ctx.bot, today)
+    if birthdays_today:
+        names = ", ".join(birthdays_today)
+        await update.message.reply_text(f"✅ Tabrik yuborildi: {names}")
+    else:
+        await update.message.reply_text(f"😊 Bugun ({today}) hech kimning tug'ilgan kuni yo'q.")
+
+
+# Har kuni soat 09:00 O'zbekiston vaqtida (04:00 UTC)
 async def daily_check(ctx: ContextTypes.DEFAULT_TYPE):
-    today = datetime.now().strftime("%d.%m")
-    data = load_data()
-    birthdays_today = [name for name, date in data.items() if date == today]
-
-    if birthdays_today and GROUP_ID != 0:
-        for name in birthdays_today:
-            await ctx.bot.send_message(
-                chat_id=GROUP_ID,
-                text=(
-                    f"🎂 *Hurmatli {name}!*\n\n"
-                    f"Safia jamoasi nomidan tug'ilgan kuningiz bilan samimiy tabriklaymiz! 🎉\n"
-                    f"Hayotingizning har bir kuni yangi yutuqlar va quvonchlarga to'la bo'lsin! "
-                    f"Ishingizda va karyerangizda yangi yutuqlar, har bir qadamingizda muvaffaqiyat, "
-                    f"oilangizda doim tinchlik, baxt va sog'lik hukm sursin! "
-                    f"Siz uchun eng yaxshi tilaklar! 🥳\n\n"
-                    f"*Safia jamoasi* 🎂"
-                ),
-                parse_mode="Markdown"
-            )
+    today = today_uzt()
+    await send_greetings(ctx.bot, today)
 
 
 def main():
@@ -135,10 +149,14 @@ def main():
     app.add_handler(CommandHandler("list", list_bd))
     app.add_handler(CommandHandler("delete", delete))
     app.add_handler(CommandHandler("check", check))
+    app.add_handler(CommandHandler("sendnow", sendnow))
 
-    # Har kuni soat 09:00 da ishga tushadi (UTC+5 = 04:00 UTC)
+    # Har kuni soat 09:00 O'zbekiston = 04:00 UTC
     job_queue = app.job_queue
-    job_queue.run_daily(daily_check, time=datetime.strptime("04:00", "%H:%M").time())
+    job_queue.run_daily(
+        daily_check,
+        time=datetime(2000, 1, 1, 4, 0, 0, tzinfo=timezone.utc).timetz()
+    )
 
     print("✅ Bot ishga tushdi!")
     app.run_polling()
