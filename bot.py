@@ -8,9 +8,9 @@ from telegram.ext import (
 
 TOKEN = os.environ.get("BOT_TOKEN")
 GROUP_ID = int(os.environ.get("GROUP_ID", "0"))
+GROUP_ID2 = int(os.environ.get("GROUP_ID2", "0"))
 DATA_FILE = "birthdays.json"
 
-# O'zbekiston vaqti UTC+5
 UZT = timezone(timedelta(hours=5))
 
 
@@ -33,37 +33,47 @@ def today_uzt():
 async def send_greetings(bot, today):
     data = load_data()
     birthdays_today = [name for name, date in data.items() if date == today]
-    if birthdays_today and GROUP_ID != 0:
+    if birthdays_today:
         for name in birthdays_today:
-            await bot.send_message(
-                chat_id=GROUP_ID,
-                text=(
-                    f"🎂 *Hurmatli {name}!*\n\n"
-                    f"Safia jamoasi nomidan tug'ilgan kuningiz bilan samimiy tabriklaymiz! 🎉\n"
-                    f"Hayotingizning har bir kuni yangi yutuqlar va quvonchlarga to'la bo'lsin! "
-                    f"Ishingizda va karyerangizda yangi yutuqlar, har bir qadamingizda muvaffaqiyat, "
-                    f"oilangizda doim tinchlik, baxt va sog'lik hukm sursin! "
-                    f"Siz uchun eng yaxshi tilaklar! 🥳\n\n"
-                    f"*Safia jamoasi* 🎂"
-                ),
-                parse_mode="Markdown"
+            text = (
+                f"🎂 *Hurmatli {name}!*\n\n"
+                f"Safia jamoasi nomidan tug'ilgan kuningiz bilan samimiy tabriklaymiz! 🎉\n"
+                f"Hayotingizning har bir kuni yangi yutuqlar va quvonchlarga to'la bo'lsin! "
+                f"Ishingizda va karyerangizda yangi yutuqlar, har bir qadamingizda muvaffaqiyat, "
+                f"oilangizda doim tinchlik, baxt va sog'lik hukm sursin! "
+                f"Siz uchun eng yaxshi tilaklar! 🥳\n\n"
+                f"*Safia jamoasi* 🎂"
             )
+            if GROUP_ID != 0:
+                await bot.send_message(chat_id=GROUP_ID, text=text, parse_mode="Markdown")
+            if GROUP_ID2 != 0:
+                await bot.send_message(chat_id=GROUP_ID2, text=text, parse_mode="Markdown")
     return birthdays_today
 
 
-# /add Ism KK.OO
+# /add Familiya Ism KK.OO — oxirgi argument sana, qolganlari ism
 async def add(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     args = ctx.args
     if len(args) < 2:
-        await update.message.reply_text("❌ Format: /add Ism KK.OO\nMasalan: /add Ali 15.07")
+        await update.message.reply_text(
+            "❌ Format: /add Ism KK.OO\n"
+            "Masalan: /add Abduvali 02.10\n"
+            "Yoki: /add Abdumutalov Abduvali 02.10"
+        )
         return
-    name = args[0]
-    date_str = args[1]
+
+    date_str = args[-1]  # Oxirgi argument — sana
+    name = " ".join(args[:-1])  # Qolganlari — ism/familiya
+
     try:
         datetime.strptime(date_str, "%d.%m")
     except ValueError:
-        await update.message.reply_text("❌ Sana noto'g'ri. Format: KK.OO (masalan 15.07)")
+        await update.message.reply_text(
+            "❌ Sana noto'g'ri. Format: KK.OO (masalan 02.10)\n"
+            "Misol: /add Abdumutalov Abduvali 02.10"
+        )
         return
+
     data = load_data()
     data[name] = date_str
     save_data(data)
@@ -83,12 +93,12 @@ async def list_bd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(text, parse_mode="Markdown")
 
 
-# /delete Ism
+# /delete
 async def delete(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not ctx.args:
-        await update.message.reply_text("❌ Format: /delete Ism")
+        await update.message.reply_text("❌ Format: /delete Ism\nYoki: /delete Familiya Ism")
         return
-    name = ctx.args[0]
+    name = " ".join(ctx.args)
     data = load_data()
     if name in data:
         del data[name]
@@ -104,6 +114,7 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "🎂 *Tug'ilgan kun bot!*\n\n"
         "Buyruqlar:\n"
         "/add Ism KK.OO — qo'shish\n"
+        "/add Familiya Ism KK.OO — to'liq ism bilan\n"
         "/list — ro'yxat\n"
         "/delete Ism — o'chirish\n"
         "/check — bugun tug'ilgan kunlarni tekshirish\n"
@@ -124,7 +135,7 @@ async def check(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"😊 Bugun ({today}) hech kimning tug'ilgan kuni yo'q.")
 
 
-# /sendnow — hozir gruppaga yuborish (test uchun)
+# /sendnow
 async def sendnow(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     today = today_uzt()
     birthdays_today = await send_greetings(ctx.bot, today)
@@ -135,7 +146,6 @@ async def sendnow(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"😊 Bugun ({today}) hech kimning tug'ilgan kuni yo'q.")
 
 
-# Har kuni soat 09:00 O'zbekiston vaqtida (04:00 UTC)
 async def daily_check(ctx: ContextTypes.DEFAULT_TYPE):
     today = today_uzt()
     await send_greetings(ctx.bot, today)
@@ -151,7 +161,6 @@ def main():
     app.add_handler(CommandHandler("check", check))
     app.add_handler(CommandHandler("sendnow", sendnow))
 
-    # Har kuni soat 09:00 O'zbekiston = 04:00 UTC
     job_queue = app.job_queue
     job_queue.run_daily(
         daily_check,
